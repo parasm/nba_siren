@@ -1,6 +1,6 @@
 mod nba;
 
-use nba::endpoints::{NBAEndpoint, SaveToDB};
+use nba::endpoints::{NBAEndpoint, SaveToDB, SaveToDataframe};
 use clap::{Parser, Subcommand};
 
 //TODOs
@@ -101,10 +101,12 @@ fn main() {
             
         }
         Commands::Savestaticdata => {
-            let all_p_frames = nba::endpoints::CommonAllPlayers{
+            let player_info = nba::endpoints::CommonAllPlayers{
                 league_id: Default::default(),
                 season: Default::default(),
-            }.save_static_data().unwrap();
+            };
+            player_info.save_to_db_file().unwrap();
+            player_info.load_dataframes().unwrap();
         }
         Commands::Scoreboard => {
             nba::live_data::fetch_scoreboard().unwrap();
@@ -157,6 +159,7 @@ fn main() {
                 let boxscore = nba::endpoints::BoxScoreDefensive {
                     game_id: nba::params::GameID::ID(game_id)
                 };
+                boxscore.save_to_db_file().unwrap();
                 let boxscore_frames = boxscore.load_dataframes().unwrap();
                 for (data_set_name, dataframe) in boxscore_frames {
                     println!("{}\n{}", data_set_name, dataframe);
