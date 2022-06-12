@@ -1,7 +1,10 @@
 mod nba;
 
-use nba::endpoints::{NBAEndpoint, SaveToDB, SaveToDataframe};
+use nba::db::{SaveToDB, SaveToDataframe};
+use nba::endpoints::{BoxScoreDefensive, PlayByPlayV2, CommonAllPlayers};
 use clap::{Parser, Subcommand};
+
+use crate::nba::endpoints::VidForPlay;
 
 //TODOs
 // Ability to lookup consts like team id, player id,
@@ -73,38 +76,41 @@ fn main() {
     let args = NBACli::parse();
     match args.cmd {
         Commands::Lookup { endpoint, player_name, team_name } => {
-            if let Some(e) = endpoint {
-                fetch_endpoint(&e);
-            }else if let Some(name) = player_name {
-                let all_p_frames = nba::endpoints::CommonAllPlayers{
-                    league_id: Default::default(),
-                    season: Default::default(),
-                }.load_dataframes().unwrap();
-                let player_info_df = all_p_frames.get("CommonAllPlayers").unwrap();
-                let name_col = player_info_df.column("DISPLAY_FIRST_LAST").expect("df should have a name column");
-                let name_mask = name_col.utf8().unwrap().contains(&name).unwrap();
-                let name_df = player_info_df.filter(&name_mask).expect("Failed filtering player data");
-                println!("{}", name_df);
+            match (endpoint, player_name, team_name) {
+                (Some(e), _, _) => {
+                    fetch_endpoint(&e);
+                },
+                (_, Some(p), _) => {
+                    let all_p_frames = CommonAllPlayers::new(
+                        Default::default(),
+                        Default::default(),
+                    );
+                    all_p_frames.save_to_db_file().unwrap();
+                    let res = all_p_frames.search_table("commonallplayers", vec!["display_first_last", "person_id"], vec!["display_first_last"], &p).unwrap();
+                    println!("{:?}", res);
+                },
+                (_, _, Some(t)) => {
+                    let all_p_frames = CommonAllPlayers::new(
+                        Default::default(),
+                        Default::default(),
+                    );
+                    all_p_frames.save_to_db_file().unwrap();
+                    let res = all_p_frames.search_table("commonallplayers", vec!["team_id", "team_name"], vec!["team_city","team_name","team_abbreviation","team_code"], &t).unwrap();
+                    if res.len() > 0 {
+                        println!("{:?}", res.get(0).unwrap());
+                    }
+                    
+                },
+                (_, _, _) => println!("unsupported args")
 
-            }else if let Some(name) = team_name {
-                let all_p_frames = nba::endpoints::CommonAllPlayers{
-                    league_id: Default::default(),
-                    season: Default::default(),
-                }.load_dataframes().unwrap();
-                let player_info_df = all_p_frames.get("CommonAllPlayers").unwrap();
-                let name_col = player_info_df.column("TEAM_NAME").expect("df should have a name column");
-                let abbr_col = player_info_df.column("TEAM_ABBREVIATION").expect("df should have a name column");
-                let name_mask = name_col.utf8().unwrap().contains(&name).unwrap() | abbr_col.utf8().unwrap().contains(&name).unwrap();
-                let team_df = player_info_df.filter(&name_mask).expect("Failed filtering player data");
-                println!("{}", team_df);
             }
             
         }
         Commands::Savestaticdata => {
-            let player_info = nba::endpoints::CommonAllPlayers{
-                league_id: Default::default(),
-                season: Default::default(),
-            };
+            let player_info = CommonAllPlayers::new(
+                    Default::default(),
+                    Default::default(),
+            );
             player_info.save_to_db_file().unwrap();
             player_info.load_dataframes().unwrap();
         }
@@ -113,16 +119,18 @@ fn main() {
         }
         Commands::Test => {
 
-            let p = nba::endpoints::PlayByPlayV2{
-                game_id: nba::params::GameID::ID("0042100401".to_string()),
-                player_id: Some(1628369),
-                keyword: Some("reb".to_string()),
-                start_period: Default::default(),
-                end_period: Default::default()
-            };
-            p.save_video_db().unwrap();
-            //p.save_to_db_file().unwrap();
-
+            let p = PlayByPlayV2::new(
+                Default::default(),
+                Default::default(),
+                nba::params::GameID::ID("0042100401".to_string()),
+                Some(1628369),
+                Some("reb".to_string()),
+            );
+            p.save_to_db_file().unwrap();
+            let b = p.check_table_exists("fake").unwrap();
+            println!("{b}");
+            let res = p.search_table("playbyplay_0042100401", vec!["game_id", "player1_name"], vec!["homedescription", "neutraldescription", "visitordescription"], "foul").unwrap();
+            println!("{:?}", res);
 
         }
         Commands::Playbyplay {game_id, player_id, keyword, save_videos} => {
@@ -131,13 +139,14 @@ fn main() {
             }else {
                 None
             };
-            let p = nba::endpoints::PlayByPlayV2{
-                game_id: nba::params::GameID::ID(game_id),
-                player_id: pid,
-                keyword: keyword,
-                start_period: Default::default(),
-                end_period: Default::default()
-            };
+            let p = PlayByPlayV2::new(
+                Default::default(),
+                Default::default(),
+                nba::params::GameID::ID(game_id),
+                pid,
+                keyword,
+
+            );
             if save_videos {
                 //p.save_video().unwrap();
                 p.save_video_db().unwrap();
@@ -146,19 +155,19 @@ fn main() {
             }
         }
         Commands::Vidforplay {game_id, game_event_id } => {
-            let p = nba::endpoints::VidForPlay{
-                game_id: nba::params::GameID::ID(game_id),
-                game_event_id: game_event_id,
-            };
+            let p = VidForPlay::new(
+                nba::params::GameID::ID(game_id),
+                game_event_id,
+            );
             let u = p.get_video_url().unwrap();
             webbrowser::open(&u).unwrap();
             println!("{}", u);
         }
         Commands::Boxscore {game_id, defensive} => {
             if defensive {
-                let boxscore = nba::endpoints::BoxScoreDefensive {
-                    game_id: nba::params::GameID::ID(game_id)
-                };
+                let boxscore = BoxScoreDefensive ::new(
+                    nba::params::GameID::ID(game_id)
+                );
                 boxscore.save_to_db_file().unwrap();
                 let boxscore_frames = boxscore.load_dataframes().unwrap();
                 for (data_set_name, dataframe) in boxscore_frames {
