@@ -134,11 +134,9 @@ fn main() {
 
         }
         Commands::Playbyplay {game_id, player_id, keyword, save_videos} => {
-            let pid = if let Some(id_str) = player_id {
-                Some(id_str.parse::<i64>().unwrap())
-            }else {
-                None
-            };
+            let pid = player_id.map(|id_str| {
+                id_str.parse::<i64>().unwrap()
+            });
             let p = PlayByPlayV2::new(
                 Default::default(),
                 Default::default(),
@@ -148,7 +146,6 @@ fn main() {
 
             );
             if save_videos {
-                //p.save_video().unwrap();
                 p.save_video_db().unwrap();
             }else{
                 p.print_play_by_play().unwrap();
