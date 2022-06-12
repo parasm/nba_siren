@@ -1,5 +1,6 @@
 
 use crate::nba::params::*;
+use std::thread;
 use polars::prelude::*;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
@@ -293,14 +294,23 @@ impl PlayByPlayV2 {
         let video_id = format!("{}_{}_{}", keyword, game_id_str, pid).replace(" ", "");
         let df_load_duration = load_start.elapsed();
         let video_start_time = Instant::now();
+        let mut save_vid_handles = Vec::new();
         for r in player_info_rows {
             let res = r.unwrap();
             let event_num = res.eventnum.to_string();
             let video_url = get_url_for_video(&game_str, &event_num)?;
             let video_file_name = format!("play_videos/{}_{}.mp4", &video_id, event_num);
-            save_video(&video_url, &video_file_name)?;
             video_list_file.write(format!("file {}\n", &video_file_name).as_bytes())?;
+            let save_video_thread = thread::spawn(move || {
+                save_video(&video_url, &video_file_name)
+            });
+            save_vid_handles.push(save_video_thread);
         }
+
+        for handle in save_vid_handles {
+            handle.join().unwrap()?;
+        }
+
 
         let video_save_duration = video_start_time.elapsed();
         let output_file = format!("ALL_{}.mp4", video_id);
