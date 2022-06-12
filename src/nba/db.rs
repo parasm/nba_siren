@@ -105,7 +105,7 @@ pub trait SaveToDB: NBAEndpoint {
         }
         // let cleanup = format!("DROP TABLE IF EXISTS {}", table_name);
         // db_conn.execute(&cleanup, [])?;
-        let mut create_sql = format!("CREATE TABLE IF NOT EXISTS {} ( ", table_name.to_lowercase());
+        let mut create_sql = format!("CREATE TABLE IF NOT EXISTS {} ( ", table_name);
         for (pos, row) in json_rows.iter().enumerate() {
             let row_array = row.as_array().unwrap();
             if pos == 0 {
@@ -129,8 +129,8 @@ pub trait SaveToDB: NBAEndpoint {
         for data_set in result_sets {
             let data_set_values = data_set["rowSet"].as_array().unwrap();
             let data_set_headers = data_set["headers"].as_array().unwrap();
-            let data_set_name = data_set["name"].as_str().unwrap();
-            self.create_table(data_set_name, data_set_headers, data_set_values)?;
+            let data_set_name = data_set["name"].as_str().unwrap().to_lowercase();
+            self.create_table(&data_set_name, data_set_headers, data_set_values)?;
         }
         let sql_load_duration = load_start.elapsed();
         println!("sql loading took {:?}", &sql_load_duration);
